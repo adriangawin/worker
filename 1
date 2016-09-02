@@ -1,0 +1,132 @@
+var AWS = require("aws-sdk"),
+    fs = require('fs'),
+    utils = require("./utils");
+AWS.config.loadFromPath('./config.json');
+var s3 = new AWS.S3(),
+    APP_CONFIG_FILE = "./app.json",
+    tablicaKolejki = utils.readJSONFile(APP_CONFIG_FILE),
+    QUEUE_URL = tablicaKolejki.QueueUrl,
+    sqs = new AWS.SQS(),
+    simpledb = new AWS.SimpleDB(),
+    LOOP_TIMEOUT = 10000,
+    BUCKET_NAME = 'bucketadrian';
+var gm = require('gm').subClass({imageMagick: true});
+
+function receiveMessages()
+{
+   var params =
+   {
+      QueueUrl: QUEUE_URL,
+      AttributeNames: ['All'],
+      MaxNumberOfMessages: 1,
+      MessageAttributeNames: ['key','bucket'],
+      VisibilityTimeout: 10,
+      WaitTimeSeconds: 0
+   };
+	
+   sqs.receiveMessage(
+      params,
+      function(err, data)
+      {
+         if(err)
+	    console.log(err, err.stack);
+	 else if(!data.Messages)
+            console.log("No messages");
+         else
+         {
+            var ReceiptHandle_forDelete = data.Messages[0].ReceiptHandle;
+	    var messageinfo = data.Messages[0].Body.split('/');
+	    console.log("Otrzymano wiadomość: bucket - "+messageinfo[0]+", key - "+messageinfo[1]);
+	    var params2 =
+            {
+               Bucket: BUCKET_NAME,
+               Key: messageinfo[0]+'/'+messageinfo[1],	
+	    };
+            var file = require('fs').createWriteStream('tmp/'+messageinfo[1]);
+            var requestt = s3.getObject(params2).createReadStream().pipe(file);
+            requestt.on(
+               'finish',
+               function()
+               {
+                  console.log('Zapisano plik: ' + messageinfo[1] + ' ,na dysk');
+                  gm('tmp/'+messageinfo[1]).rotate('green', -25).write(
+                     'tmp/'+messageinfo[1],
+                     function(err)
+                     {
+                        if(err)
+                           console.log(err);
+                        else
+                        {
+                           console.log('Plik przetworzono z powodzeniem');	
+				
+                           var fileStream = require('fs').createReadStream('tmp/'+messageinfo[1]);
+                           fileStream.on(
+                              'open',
+                              function()
+                              {
+                                 var paramsu =
+                                 {
+                                    Bucket: BUCKET_NAME,
+                                    Key: 'processed/'+messageinfo[1],
+                                    ACL: 'public-read',
+                                    Body: fileStream,
+                                 };
+                                 s3.putObject(
+                                    paramsu,
+                                    function(err, datau)
+                                    {
+                                       if(err)
+                                          console.log(err, err.stack);
+                                       else
+                                       {   
+                                          console.log('Upload pliku');
+                                          var paramsdb =
+                                          {
+                                             Attributes:
+                                             [
+                                                { 
+                                                   Name: data.Messages[0].Body, 
+                                                   Value: "yes", 
+                                                   Replace: true
+                                                }
+                                             ],
+                                             DomainName: "Adrian", 
+                                             ItemName: 'ITEM001'
+                                          };
+                                          simpledb.putAttributes(
+                                             paramsdb,
+                                             function(err, datass)
+                                             {
+                                                if(err)
+                                                   console.log('Blad zapisu do bazy'+err, err.stack);
+                                                else
+                                                {
+                                                   console.log("Zapisano do bazy");
+                                                   var params =
+                                                   {
+                                                      QueueUrl: QUEUE_URL,
+                                                      ReceiptHandle: ReceiptHandle_forDelete
+                                                   };
+                                                   sqs.deleteMessage(
+                                                      params,
+                                                      function(err, data)
+                                                      {
+                                                         if(err)
+                                                            console.log(err, err.stack); 
+                                                         else
+                                                            console.log("Deleted handled message from the queue.");
+                                                      });
+                                                }
+                                             });
+                                       }
+                                    });
+                              });	
+                        }
+                     });	
+               });
+         }
+      });
+      setTimeout(receiveMessages, LOOP_TIMEOUT);
+}		
+
+receiveMessages();

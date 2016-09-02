@@ -1,0 +1,21 @@
+Wykonaj aplikację Django, o której była mowa na wykładzie.
+
+MODEL APLIKACJI
+
+Tworzenie/usuwanie/edycję obiektów: Nauczyciel, Przedmiot, Student.
+
+Przedmiot powinien mieć nazwę, przypisanego nauczyciela, oraz listę studentów.
+
+Uwaga: Jeden nauczyciel może mieć kilka przedmiotów, a także jeden student może być zapisany na kilka przedmiotów.
+
+WIDOKI
+
+- wyświetlanie listy nauczycieli
+
+- wyświetlanie informacji o przedmiocie (kto jest nauczycielem i lista zapisanych studentów)
+
+KONTROLER
+
+- operacja zapisania się studenta na przedmiot. Osoba w formularzu podaje imię i nazwisko. Jeżeli taki obiekt istnieje, zostanie przypisany do przedmiotu, jeżeli nie - utworzony i przypisany do przedmiotu.
+
+Pozostałe operacje: tworzenie przedmiotów, nauczycieli - tylko poprzez panel administracyjny.
